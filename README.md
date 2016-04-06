@@ -1,14 +1,14 @@
 # Embedtool 
-Script para auxiliar na customização de firmwares, utiliza o ambiente da imagem/diretório para fazer crosscompiler.
-A premissa é, utilizar uma imagem ou diretório com o sistema para fazer as operações de crosscompiler/customização, e por fim, gerar a imagem desejada.
-# A estrutura do embedtool é simples:
+Script to help customization firmwares, uses the image of the environment / directory to crosscompiler.
+The premise is to use an image or directory with the system to make the crosscompiler / customization operations, and finally generate the desired image.
+# The structure of the embedtool is simple:
         targets
-          Nome da placa
-            config: Arquivo que contém as diretrizes para montar imagem/diretório, tamanho do boot, tipo de formato de cada partição e etc... 
+          boardname
+            config: File containing the guidelines to mount image / directory, boot size, type of each partition and format etc ...
 
-            afterGenImg.sh: Após ser gerada a imagem e formatada, é invocado o script. É utilizado para manipular a imagem montada. 
+            afterGenImg.sh: After being generated and formatted image, is called the script. It is used to handle the mounted image.
 
-            afterCopyingData.sh: É invocado após a cópia do dados para a imagem. É utilizado para manipular arquivos da imagem final.
+            afterCopyingData.sh: It is invoked after copying data to the image. It is used to manipulate the final image files.
 
 # Parâmetros:
         Usage: ./embedtool.sh [-l|--targetlist] [-v|--verbose] [-d|--appendpath] [-t|--target <target>] [-s|--shared <shared diretory>] [options]
@@ -24,15 +24,15 @@ A premissa é, utilizar uma imagem ou diretório com o sistema para fazer as ope
         -c, --chroot <imgfile|diretory> ["cmd"]                                      chroot in image or diretory and mount shared diretory and/or execute command using image enviroment. Use with in shared diretory.
         -s, --shared <shared diretory>                                               shared diretory for using with --chroot. Mount inside chroot image/diretory.
 
-# Pré-requisitos:
-Em um sistema baseado no Debian, certifique-se que os seguintes pacotes estão instalados:
+# Pre-requisites:
+On a Debian-based system, make sure that the following packages are installed:
 ```
 apt-get install qemu qemu-user-static binfmt-support rsync kpartx
 ```
 
-Exemplos:
+Examples:
 
-# montar uma imagem:
+# mount image:
         # ./embedtool.sh -v -t rpi -m 2015-11-12-jessie-minibian.img /mnt/rpi/
         [info] Loading target config: rpi.
         [info] Mounting image / at /mnt/rpi//.
@@ -40,19 +40,19 @@ Exemplos:
         [info] Sector offset 16 - Byte offset 8192.
         [info] Mounting image /boot at /mnt/rpi/boot.
 
-# montar o cartão de memória:
+# mount sdcard:
         # ./embedtool.sh -v -t rpi -m /dev/sdb /mnt/rpi/
         [info] Loading target config: rpi.
         [info] Mounting /dev/sdb2 at /mnt/rpi/.
         [info] Mounting /dev/sdb1 at /mnt/rpi/boot.
 
-# desmontar um cartão de memória/imagem:
+# umount sdcard/image:
         # ./embedtool.sh -v -t rpi -u /mnt/rpi/
         [info] Loading target config: rpi.
         [info] Umounting: /mnt/rpi/boot.
         [info] Umounting: /mnt/rpi/.
 
-# Copiar os dados do cartão de memória para uma pasta:
+# Copy the data from the memory card to a folder:
         # ./embedtool.sh -v -t rpi --copy /dev/sdb sdcard
         [info] Loading target config: rpi.
         [info] Mounting /dev/sdb2 at /tmp/.embedtool3782.
@@ -62,13 +62,13 @@ Exemplos:
         [info] Umounting: /tmp/.embedtool3782.
         [info] done.
 
-# Copiar uma imagem para o cartão de memória:
+# Copy an image to the memory card:
         # ./embedtool.sh -v -t rpi --copy 2015-11-12-jessie-minibian.img /dev/sdb
         [info] Loading target config: rpi.
         [info] recording 2015-11-12-jessie-minibian.img to /dev/sdb.
         [info] done.
 
-# Utilizando o chroot em uma imagem
+# Using chroot in image:
         # ./embedtool.sh -v -t rpi -s /home/leonardo/ -c 2015-11-21-raspbian-jessie-lite.img 
         [info] Loading target config: rpi.
         [info] Mounting image / at /tmp/.embedtool28911/.
@@ -81,7 +81,7 @@ Exemplos:
         root@QemuArm-armv7l ~ #: uname -a
         Linux notebookPc 3.16.0-4-amd64 #1 SMP Debian 3.16.7-ckt20-1+deb8u2 (2016-01-02) armv7l GNU/Linux
 
-        Compilando um programa em C, fiz um teste no /tmp:
+        Compiling a program in C, I did a test in /tmp:
         pico /tmp/testing.c
         #include <stdio.h>
 
@@ -114,7 +114,7 @@ Exemplos:
         libc.so.6 => /lib/arm-linux-gnueabihf/libc.so.6 (0xf6689000)
         /lib/ld-linux-armhf.so.3 (0xf6fcf000)
 
-# Construir uma imagem personalizada a partir de um diretório que contém o sistema:
+# Building a custom image from a directory that contains the system:
         # ./embedtool.sh -v -t rpi -bimg sdcard/ jessie-minibian-modified.img
         [info] Loading target config: rpi.
         [info] Target image: jessie-minibian-modified.img | Target diretory: sdcard/.
