@@ -10,7 +10,7 @@ The premise is to use an image or directory with the system to make the crosscom
 
             afterCopyingData.sh: It is invoked after copying data to the image. It is used to manipulate the final image files.
 
-# Parâmetros:
+# Parameters:
         Usage: ./embedtool.sh [-l|--targetlist] [-v|--verbose] [-d|--appendpath] [-t|--target <target>] [-s|--shared <shared diretory>] [options]
         Options:
         -l, --targetlist                                                             lists the supported targets.
