@@ -32,6 +32,7 @@
 declare -r QEMU_ARM_STATIC_BIN=$(whereis -b qemu-arm-static | awk '{ print $2 }')
 declare -r RSYNC_BIN=$(whereis -b rsync | awk '{ print $2 }')
 declare -r KPARTX_BIN=$(whereis -b kpartx | awk '{ print $2 }')
+declare -r LOSETUP_BIN=$(whereis -b losetup | awk '{ print $2 }')
 
 CONFIGPATH="./targets/"
 RED='\033[0;31m'
@@ -116,11 +117,11 @@ function _mount() {
 		mount -o loop,offset=$BYTE_OFFSET,rw $SOURCE $MOUNT_POINT/ || error "cant mount $MOUNT_POINT/"
 		
 		if [ "$SECTOR_OFFSET_BOOT" != "" ]; then
-			BYTE_OFFSET_BOOT=$(($SECTOR_OFFSET_BOOT * $SECTOR_SIZE))
-			log_app_msg "Sector offset $SECTOR_OFFSET_BOOT - Byte offset $BYTE_OFFSET_BOOT" 
-			log_app_msg "Mounting image ${BOOTFS_MOUNTPOINT} at $MOUNT_POINT/${BOOTFS_MOUNTPOINT}"
-			mkdir -p "$MOUNT_POINT"/"$BOOTFS_MOUNTPOINT"
-			mount -o loop,offset=$BYTE_OFFSET_BOOT,rw $SOURCE $MOUNT_POINT/${BOOTFS_MOUNTPOINT} || error "cant mount $MOUNT_POINT/${BOOTFS_MOUNTPOINT}"
+            BYTE_OFFSET_BOOT=$(($SECTOR_OFFSET_BOOT * $SECTOR_SIZE))
+            log_app_msg "Sector offset $SECTOR_OFFSET_BOOT - Byte offset $BYTE_OFFSET_BOOT" 
+            log_app_msg "Mounting image ${BOOTFS_MOUNTPOINT} at $MOUNT_POINT/${BOOTFS_MOUNTPOINT}"
+            mkdir -p "$MOUNT_POINT"/"$BOOTFS_MOUNTPOINT"
+            mount -o loop,offset=$BYTE_OFFSET_BOOT,rw $SOURCE $MOUNT_POINT/${BOOTFS_MOUNTPOINT} || error "cant mount $MOUNT_POINT/${BOOTFS_MOUNTPOINT}"
 		fi
 		
 	else
@@ -259,23 +260,33 @@ function buildImg() {
 	log_app_msg "Mapping devices..."
 	sync
 	# mapping devices
-	local KPARTX_VERBOSE="$($KPARTX_BIN -vas "$IMAGE")"
-	local MAPPED_DEVS=($(echo "$KPARTX_VERBOSE" | awk '{ print $3 }'))
-	local BOOTFS="/dev/mapper/${MAPPED_DEVS[0]}"
-	local ROOTFS="/dev/mapper/${MAPPED_DEVS[1]}"
-	local LOOPDEV="$(echo "$KPARTX_VERBOSE" | head -n1 | awk '{ print $8 }')"
+	local KPARTX_VERBOSE="$($KPARTX_BIN -vasl "$IMAGE")"
+	local MAPPED_DEVS=($(echo "$KPARTX_VERBOSE" | awk '{ print $1 }'))
+	local LOOPDEV="$(echo "$KPARTX_VERBOSE" | head -n1 | awk '{ print $5 }')"
+	
+	local BOOTFS="/dev/${MAPPED_DEVS[0]}"
+	local ROOTFS="/dev/${MAPPED_DEVS[1]}"
+	if [ -b /dev/mapper/${MAPPED_DEVS[0]} ]; then
+        local BOOTFS="/dev/mapper/${MAPPED_DEVS[0]}"
+	fi
+	
+	if [ -b /dev/mapper/${MAPPED_DEVS[1]} ]; then
+        local ROOTFS="/dev/mapper/${MAPPED_DEVS[1]}"
+	fi
+	
 	# partition table changes, force re-read the partition table.
 	partprobe $LOOPDEV
 	# format bootfs
 	log_app_msg "Formating ${BOOTFS}"
 	mkfs -t $BUILDIMAGE_BOOTFS_TYPE $BUILDIMAGE_BOOTFS_MKFS_ARGS "${BOOTFS}" &>/dev/null || { 
-		$KPARTX_BIN -ds "$IMAGE" &>/dev/null
+		$LOSETUP_BIN -d $LOOPDEV
 		error "Cant format ${BOOTFS_MOUNTPOINT}"
 	}
 	# format rootfs
+	# NOTE: ext4 flags: 64bit metadata_csum (non boot) or use mkfs -t $BUILDIMAGE_ROOTFS_TYPE -O^64bit,^metadata_csum $BUILDIMAGE_ROOTFS_MKFS_ARGS "${ROOTFS}"
 	log_app_msg "Formating ${ROOTFS}"
 	mkfs -t $BUILDIMAGE_ROOTFS_TYPE $BUILDIMAGE_ROOTFS_MKFS_ARGS "${ROOTFS}" &>/dev/null || { 
-		$KPARTX_BIN -ds "$IMAGE" &>/dev/null
+		$LOSETUP_BIN -d $LOOPDEV
 		error "Cant format / rootfs"
 	}
 	# get uuid of bootfs & rootfs for use in scripts
@@ -285,7 +296,7 @@ function buildImg() {
 	if [ -f "$CONFIGPATH"/"$BUILDIMAGE_TARGET"/"$BUILDIMAGE_AFTERGEN" ]; then
 		log_app_msg "executing $BUILDIMAGE_AFTERGEN"
 		source "$CONFIGPATH"/"$BUILDIMAGE_TARGET"/"$BUILDIMAGE_AFTERGEN" || { 
-			$KPARTX_BIN -ds "$IMAGE" &>/dev/null
+			$LOSETUP_BIN -d $LOOPDEV
 			error "Cant run $BUILDIMAGE_AFTERGEN"
 		}
 	fi 
@@ -301,13 +312,14 @@ function buildImg() {
 	mount "${BOOTFS}" "$BUILDIMAGE_MOUNTPOINT"/"${BOOTFS_MOUNTPOINT}" || error "Cant mount ${BOOTFS} at $BUILDIMAGE_MOUNTPOINT"
 	# copy data
 	log_app_msg "Copying ${TARGET} to $BUILDIMAGE_MOUNTPOINT"
+	#-rltvz
 	rsync --delete -avP --stats --human-readable "$TARGET"/* "$BUILDIMAGE_MOUNTPOINT" 1>/dev/null || log_failure_msg "Cant copy files ${TARGET} to $BUILDIMAGE_MOUNTPOINT"
 	sync
 	# execute after copying data
 	if [ -f "$CONFIGPATH"/"$BUILDIMAGE_TARGET"/"$BUILDIMAGE_AFTERCOPYDATA" ]; then
 		log_app_msg "executing $BUILDIMAGE_AFTERCOPYDATA"
 		source "$CONFIGPATH"/"$BUILDIMAGE_TARGET"/"$BUILDIMAGE_AFTERCOPYDATA" || { 
-			$KPARTX_BIN -ds "$IMAGE" &>/dev/null
+			$LOSETUP_BIN -d $LOOPDEV
 			error "Cant run $BUILDIMAGE_AFTERCOPYDATA"
 		}
 	fi 
@@ -318,7 +330,7 @@ function buildImg() {
 	sync
 	# delete loop device
 	log_app_msg "Deleting loop devices.."
-	$KPARTX_BIN -ds "$IMAGE" &>/dev/null
+	$LOSETUP_BIN -d $LOOPDEV
 	# remove temp diretory
 	rm -rf "$BUILDIMAGE_MOUNTPOINT"
 	log_app_msg "$IMAGE generated"
