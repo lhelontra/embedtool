@@ -110,15 +110,19 @@ function _mount() {
 		SECTOR_OFFSET=$(echo "$FDISK_RESULT" | awk '$7 == "Linux" || $6 == "Linux" { print $2 }')
 		BYTE_OFFSET=$(($SECTOR_OFFSET * $SECTOR_SIZE))
 		SECTOR_OFFSET_BOOT=$(echo "$FDISK_RESULT" | awk '$6 ~ /FAT|W95/ || $7 ~ /FAT|W95/ { print $2 }')
-		BYTE_OFFSET_BOOT=$(($SECTOR_OFFSET_BOOT * $SECTOR_SIZE))
 		log_app_msg "Mounting image / at $MOUNT_POINT/"
 		log_app_msg "Sector offset $SECTOR_OFFSET - Byte offset $BYTE_OFFSET"
 		mkdir -p "$MOUNT_POINT"/
 		mount -o loop,offset=$BYTE_OFFSET,rw $SOURCE $MOUNT_POINT/ || error "cant mount $MOUNT_POINT/"
-		log_app_msg "Sector offset $SECTOR_OFFSET_BOOT - Byte offset $BYTE_OFFSET_BOOT" 
-		log_app_msg "Mounting image ${BOOTFS_MOUNTPOINT} at $MOUNT_POINT/${BOOTFS_MOUNTPOINT}"
-		mkdir -p "$MOUNT_POINT"/"$BOOTFS_MOUNTPOINT"
-		mount -o loop,offset=$BYTE_OFFSET_BOOT,rw $SOURCE $MOUNT_POINT/${BOOTFS_MOUNTPOINT} || error "cant mount $MOUNT_POINT/${BOOTFS_MOUNTPOINT}"
+		
+		if [ "$SECTOR_OFFSET_BOOT" != "" ]; then
+			BYTE_OFFSET_BOOT=$(($SECTOR_OFFSET_BOOT * $SECTOR_SIZE))
+			log_app_msg "Sector offset $SECTOR_OFFSET_BOOT - Byte offset $BYTE_OFFSET_BOOT" 
+			log_app_msg "Mounting image ${BOOTFS_MOUNTPOINT} at $MOUNT_POINT/${BOOTFS_MOUNTPOINT}"
+			mkdir -p "$MOUNT_POINT"/"$BOOTFS_MOUNTPOINT"
+			mount -o loop,offset=$BYTE_OFFSET_BOOT,rw $SOURCE $MOUNT_POINT/${BOOTFS_MOUNTPOINT} || error "cant mount $MOUNT_POINT/${BOOTFS_MOUNTPOINT}"
+		fi
+		
 	else
 		error "mount only image or device"
 	fi
