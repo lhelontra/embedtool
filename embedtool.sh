@@ -105,11 +105,12 @@ function _mount() {
 		log_app_msg "Mounting ${SOURCE}2 at $MOUNT_POINT"
 		mount "${SOURCE}2" "$MOUNT_POINT" || error "cant mount ${SOURCE}2"
 		log_app_msg "Mounting ${SOURCE}1 at ${MOUNT_POINT}/${BOOTFS_MOUNTPOINT}"
+		mkdir -p  "${MOUNT_POINT}"/"$BOOTFS_MOUNTPOINT"
 		mount "${SOURCE}1" "${MOUNT_POINT}"/"$BOOTFS_MOUNTPOINT" || error "cant mount ${SOURCE}1"
 	
 	# mount image
 	elif [ -f $SOURCE ]; then
-		losetup -d $(losetup --associated $SOURCE | awk '{ print $1 }' | cut -d: -f1) &>/dev/null
+		$LOSETUP_BIN -d $($LOSETUP_BIN --associated $SOURCE | awk '{ print $1 }' | cut -d: -f1) &>/dev/null
 		FDISK_RESULT=$(/sbin/fdisk -lu $SOURCE)
 		SECTOR_OFFSET=$(echo "$FDISK_RESULT" | awk '$7 == "Linux" || $6 == "Linux" { print $2 }')
 		BYTE_OFFSET=$(($SECTOR_OFFSET * $SECTOR_SIZE))
@@ -118,8 +119,8 @@ function _mount() {
 		log_app_msg "Sector offset $SECTOR_OFFSET - Byte offset $BYTE_OFFSET"
 		mkdir -p "$MOUNT_POINT"/
 		
-		LOOPDEV=$(losetup --find)
-		losetup $LOOPDEV $SOURCE -o $BYTE_OFFSET
+		LOOPDEV=$($LOSETUP_BIN --find)
+		$LOSETUP_BIN $LOOPDEV $SOURCE -o $BYTE_OFFSET
 		mount -t auto $LOOPDEV $MOUNT_POINT/ || error "cant mount $MOUNT_POINT/" || error "cant mount $MOUNT_POINT/"
 		
 		if [ "$SECTOR_OFFSET_BOOT" != "" ]; then
@@ -128,8 +129,8 @@ function _mount() {
             log_app_msg "Mounting image ${BOOTFS_MOUNTPOINT} at $MOUNT_POINT/${BOOTFS_MOUNTPOINT}"
             mkdir -p "$MOUNT_POINT"/"$BOOTFS_MOUNTPOINT"
             
-            LOOPDEV_BOOT=$(losetup --find)
-			losetup $LOOPDEV_BOOT $SOURCE -o $BYTE_OFFSET_BOOT
+            LOOPDEV_BOOT=$($LOSETUP_BIN --find)
+			$LOSETUP_BIN $LOOPDEV_BOOT $SOURCE -o $BYTE_OFFSET_BOOT
             mount -t auto $LOOPDEV_BOOT $MOUNT_POINT/${BOOTFS_MOUNTPOINT} || error "cant mount $MOUNT_POINT/${BOOTFS_MOUNTPOINT}"
 		fi
 		
@@ -292,12 +293,21 @@ function buildImg() {
 		error "Cant format ${BOOTFS_MOUNTPOINT}"
 	}
 	# format rootfs
-	# NOTE: ext4 flags: 64bit metadata_csum (non boot) or use mkfs -t $BUILDIMAGE_ROOTFS_TYPE -O^64bit,^metadata_csum $BUILDIMAGE_ROOTFS_MKFS_ARGS "${ROOTFS}"
 	log_app_msg "Formating ${ROOTFS}"
 	mkfs -t $BUILDIMAGE_ROOTFS_TYPE $BUILDIMAGE_ROOTFS_MKFS_ARGS "${ROOTFS}" &>/dev/null || { 
 		$LOSETUP_BIN -d $LOOPDEV
 		error "Cant format / rootfs"
 	}
+	
+	# NOTE: if defined, overwrite mke2fs default flags
+	[ ! -z "$BUILDIMAGE_ROOTFS_FLAGS" ] && {
+		log_app_msg "Overwrite mk2fs flags"
+		mke2fs -F -O $BUILDIMAGE_ROOTFS_FLAGS ${ROOTFS} &>/dev/null || { 
+			$LOSETUP_BIN -d $LOOPDEV
+			error "Cant overwrite mk2fs flags"
+		}
+	}
+	
 	# get uuid of bootfs & rootfs for use in scripts
 	local ROOTFS_UUID="$(blkid -s UUID -o value $ROOTFS)"
 	local BOOTFS_UUID="$(blkid -s UUID -o value $BOOTFS)"
