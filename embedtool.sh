@@ -99,14 +99,17 @@ function umountSharedDir() {
 function _mount() {
 	local SOURCE="$1"
 	local MOUNT_POINT="$2"
+	
 	# mount block device
 	if [ -b $SOURCE ]; then
 		log_app_msg "Mounting ${SOURCE}2 at $MOUNT_POINT"
 		mount "${SOURCE}2" "$MOUNT_POINT" || error "cant mount ${SOURCE}2"
 		log_app_msg "Mounting ${SOURCE}1 at ${MOUNT_POINT}/${BOOTFS_MOUNTPOINT}"
 		mount "${SOURCE}1" "${MOUNT_POINT}"/"$BOOTFS_MOUNTPOINT" || error "cant mount ${SOURCE}1"
+	
 	# mount image
 	elif [ -f $SOURCE ]; then
+		losetup -d $(losetup --associated $SOURCE | awk '{ print $1 }' | cut -d: -f1) &>/dev/null
 		FDISK_RESULT=$(/sbin/fdisk -lu $SOURCE)
 		SECTOR_OFFSET=$(echo "$FDISK_RESULT" | awk '$7 == "Linux" || $6 == "Linux" { print $2 }')
 		BYTE_OFFSET=$(($SECTOR_OFFSET * $SECTOR_SIZE))
@@ -114,14 +117,20 @@ function _mount() {
 		log_app_msg "Mounting image / at $MOUNT_POINT/"
 		log_app_msg "Sector offset $SECTOR_OFFSET - Byte offset $BYTE_OFFSET"
 		mkdir -p "$MOUNT_POINT"/
-		mount -o loop,offset=$BYTE_OFFSET,rw $SOURCE $MOUNT_POINT/ || error "cant mount $MOUNT_POINT/"
+		
+		LOOPDEV=$(losetup --find)
+		losetup $LOOPDEV $SOURCE -o $BYTE_OFFSET
+		mount -t auto $LOOPDEV $MOUNT_POINT/ || error "cant mount $MOUNT_POINT/" || error "cant mount $MOUNT_POINT/"
 		
 		if [ "$SECTOR_OFFSET_BOOT" != "" ]; then
             BYTE_OFFSET_BOOT=$(($SECTOR_OFFSET_BOOT * $SECTOR_SIZE))
             log_app_msg "Sector offset $SECTOR_OFFSET_BOOT - Byte offset $BYTE_OFFSET_BOOT" 
             log_app_msg "Mounting image ${BOOTFS_MOUNTPOINT} at $MOUNT_POINT/${BOOTFS_MOUNTPOINT}"
             mkdir -p "$MOUNT_POINT"/"$BOOTFS_MOUNTPOINT"
-            mount -o loop,offset=$BYTE_OFFSET_BOOT,rw $SOURCE $MOUNT_POINT/${BOOTFS_MOUNTPOINT} || error "cant mount $MOUNT_POINT/${BOOTFS_MOUNTPOINT}"
+            
+            LOOPDEV_BOOT=$(losetup --find)
+			losetup $LOOPDEV_BOOT $SOURCE -o $BYTE_OFFSET_BOOT
+            mount -t auto $LOOPDEV_BOOT $MOUNT_POINT/${BOOTFS_MOUNTPOINT} || error "cant mount $MOUNT_POINT/${BOOTFS_MOUNTPOINT}"
 		fi
 		
 	else
