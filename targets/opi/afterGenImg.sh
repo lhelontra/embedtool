@@ -7,16 +7,19 @@
 #
 
 local POSTGEN_DIR="$(dirname ${BASH_SOURCE[0]})"
-local UBOOT_FILE="${POSTGEN_DIR}/boot/u-boot-sunxi-with-spl.bin"
+local BOOT0_OPI="${POSTGEN_DIR}/boot/boot0_OPI.fex"
+local UBOOT0_OPI="${POSTGEN_DIR}/boot/u-boot_OPI.fex"
 
-dd if=/dev/zero of=$LOOPDEV bs=1k count=1023 seek=1 status=noxfer > /dev/null 2>&1 || {
-    log_failure_msg "error on zero $LOOPDEV"
-    return 1
+log_app_msg "Installing $BOOT0_OPI"
+dd if=$BOOT0_OPI of=$LOOPDEV bs=1k seek=8 conv=notrunc status=none || {
+	log_failure_msg "error on installing $BOOT0_OPI"
+	return 1
 }
 
-dd if=$UBOOT_FILE of=$LOOPDEV bs=1024 seek=8 status=noxfer > /dev/null 2>&1 || {
-    log_failure_msg "error on installing $UBOOT_FILE"
-    return 1
+log_app_msg "Installing $UBOOT0_OPI"
+dd if=$UBOOT0_OPI of=$LOOPDEV bs=1k seek=16400 conv=notrunc status=none || {
+	log_failure_msg "error on installing $UBOOT0_OPI"
+	return 1
 }
 
 return 0
