@@ -190,6 +190,9 @@ function enterChroot() {
 	u_mount "$MOUNT_POINT"
 	umountSharedDir "$MOUNT_POINT"
 	rm -rf $MOUNT_POINT
+	
+	# detach all devices associated with img
+	losetup -d $(losetup -j $IMG_FILE | awk '{ print $1 }' | cut -d: -f1)
 }
 
 function copy() {
