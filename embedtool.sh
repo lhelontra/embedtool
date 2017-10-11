@@ -34,7 +34,7 @@ declare -r RSYNC_BIN=$(whereis -b rsync | awk '{ print $2 }')
 declare -r KPARTX_BIN=$(whereis -b kpartx | awk '{ print $2 }')
 declare -r LOSETUP_BIN=$(whereis -b losetup | awk '{ print $2 }')
 
-CONFIGPATH="./targets/"
+CONFIGPATH="./targets/ /usr/local/share/embedtool/targets/"
 RED='\033[0;31m'
 BLUE='\033[1;36m'
 NC='\033[0m'
@@ -62,11 +62,11 @@ function log_app_msg() {
 [ -z $KPARTX_BIN ] && error "Please, install kpartx package: apt-get install kpartx"
 
 function usage() {
-	echo -ne "Usage: $0 [-l|--targetlist] [-v|--verbose] [-d|--appendpath] [-t|--target <target>] [-s|--shared <shared diretory>] [options]\nOptions:\t
+	echo -ne "Usage: $0 [-l|--targetlist] [-v|--verbose] [-d|--appendpath <path>] [-t|--target <target>] [-s|--shared <shared diretory>] [options]\nOptions:\t
 	-l, --targetlist                                                             lists the supported targets.
 	-v, --verbose                                                                enable verbose.
-	-ap, --appendpath                                                            Append target path.
-	-t, --target <machine>                                                       load target config file. (default target: Null | default: config diretory: $CONFIGPATH)
+	-ap, --appendpath <path>                                                     Append target(s) path.
+	-t, --target <machine>                                                       load target config file. (default target: Null | default: config directories: $CONFIGPATH)
 	-m, --mount <imgfile|device> <mount_point_dir>                               mount source to mount point diretory.
 	-u, --umount <mount_point_dir>                                               umount image mounted.
 	-cp,--copy <device|image> <device destination|destination diretory>          copy data sorce to destination.
