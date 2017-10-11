@@ -245,35 +245,52 @@ function buildImg() {
 	local IMAGE="$2"
 	[ -z $IMAGE ] || [ -z $TARGET ] && error "invalid arguments"
 	[ ! -d $TARGET ] && error "Target is not a directory"
+
 	[ -f $IMAGE ] && {
 		echo -n "File $IMAGE exists. You want to overwrite (y/n)? "
 		read answer
 		echo "$answer" | grep -iq "^n" && exit 0
 	}
+
 	log_app_msg "Target image: $IMAGE | Target folder: $TARGET"
-	# size without boot folder
-	local SYSTEM_PART_SIZE_MB=$(du --total --exclude="${TARGET}/${BOOTFS_MOUNTPOINT}/*" -m ${TARGET} | tail -n 1 | awk '{ print $1 }')
+
+	if [ "$BUILDIMAGE_USE_BOOTFS" == "yes" ]; then
+		# size without boot folder
+		local SYSTEM_PART_SIZE_MB=$(du --total --exclude="${TARGET}/${BOOTFS_MOUNTPOINT}/*" -m ${TARGET} | tail -n 1 | awk '{ print $1 }')
+	else
+		local SYSTEM_PART_SIZE_MB=$(du --total -m ${TARGET} | tail -n 1 | awk '{ print $1 }')
+	fi
+
 	# rootfs + extra size
 	SYSTEM_PART_SIZE_MB=$(($SYSTEM_PART_SIZE_MB+$BUILDIMAGE_SYSTEM_EXTRA_SIZE_MB))
+
 	# rootfs + reserved blocks
-	SYSTEM_PART_SIZE_MB=$(awk "BEGIN { printf \"%.0f\n\", $SYSTEM_PART_SIZE_MB * (1 + ($BUILDIMAGE_RESERVED_BLOCKS_PERCENT / 100)) }")
-	# convert bootfs size mb to bytes sector
-	local BOOTFS_PART_SIZE_BYTES_SECTOR=$(awk "BEGIN { printf \"%.0f\n\", (($BUILDIMAGE_BOOTFS_PART_SIZE_MB * 1024) * 1024) / $SECTOR_SIZE }")
-	# begining sector
-	local START_SECTOR=$(($BOOTFS_PART_SIZE_BYTES_SECTOR+$BUILDIMAGE_BOOTFS_START_SECTOR))
-	# calculate total size bootfs + rootfs
-	local IMG_SIZE_BYTES=$(awk "BEGIN { printf \"%.0f\n\", ((($SYSTEM_PART_SIZE_MB + $BUILDIMAGE_BOOTFS_PART_SIZE_MB) * 1024) * 1024) / $SECTOR_SIZE }")
-	log_app_msg "Creating $IMAGE with boot size: ${BUILDIMAGE_BOOTFS_PART_SIZE_MB}MB | root size: ${SYSTEM_PART_SIZE_MB}MB | Reserved blocks: ${BUILDIMAGE_RESERVED_BLOCKS_PERCENT}%"
-	# create image
+	if [ ! -z "$BUILDIMAGE_RESERVED_BLOCKS_PERCENT" ]; then
+		SYSTEM_PART_SIZE_MB=$(awk "BEGIN { printf \"%.0f\n\", $SYSTEM_PART_SIZE_MB * (1 + ($BUILDIMAGE_RESERVED_BLOCKS_PERCENT / 100)) }")
+	fi
+
+	if [ "$BUILDIMAGE_USE_BOOTFS" == "yes" ]; then
+		# convert bootfs size mb to bytes sector
+		local BOOTFS_PART_SIZE_BYTES_SECTOR=$(awk "BEGIN { printf \"%.0f\n\", (($BUILDIMAGE_BOOTFS_PART_SIZE_MB * 1024) * 1024) / $SECTOR_SIZE }")
+		# begining sector
+		local START_SECTOR=$(($BOOTFS_PART_SIZE_BYTES_SECTOR+$BUILDIMAGE_START_SECTOR+$BUILDIMAGE_START_SECTOR))
+		# calculate total size bootfs + rootfs
+		local IMG_SIZE_BYTES=$(awk "BEGIN { printf \"%.0f\n\", ((($SYSTEM_PART_SIZE_MB + $BUILDIMAGE_BOOTFS_PART_SIZE_MB) * 1024) * 1024) / $SECTOR_SIZE }")
+		log_app_msg "Creating $IMAGE with boot size: ${BUILDIMAGE_BOOTFS_PART_SIZE_MB}MB | root size: ${SYSTEM_PART_SIZE_MB}MB"
+	else
+		local IMG_SIZE_BYTES=$(awk "BEGIN { printf \"%.0f\n\", (($SYSTEM_PART_SIZE_MB * 1024) * 1024) / $SECTOR_SIZE }")
+		log_app_msg "Creating $IMAGE with root size: ${SYSTEM_PART_SIZE_MB}MB"
+	fi
+
+	# create a empty image
 	dd if=/dev/zero of=$IMAGE count=$IMG_SIZE_BYTES bs=$SECTOR_SIZE status=none || error "Error on create image"
-	# erase first 512 bytes mbr / lb1
-	dd if=/dev/zero of=$IMAGE bs=$SECTOR_SIZE count=1 conv=notrunc status=none || error "Error on create image"
 	sync
+
 # 	fdisk ${IMAGE} << EOF
 # 	n
 # 	p
 # 	1
-# 	$BUILDIMAGE_BOOTFS_START_SECTOR
+# 	$BUILDIMAGE_START_SECTOR
 # 	$(($START_SECTOR-1))
 # 	t
 # 	$BUILDIMAGE_BOOTFS_TYPE_ID
@@ -284,34 +301,45 @@ function buildImg() {
 #
 # 	w
 # 	EOF
-	log_app_msg "Partitiong image.."
-	echo -ne "n\np\n1\n$BUILDIMAGE_BOOTFS_START_SECTOR\n$(($START_SECTOR-1))\nt\n$BUILDIMAGE_BOOTFS_TYPE_ID\nn\np\n2\n$START_SECTOR\n\nw\n" | fdisk ${IMAGE} 1>/dev/null
+
+	log_app_msg "Partitiong image..."
+	if [ "$BUILDIMAGE_USE_BOOTFS" == "yes" ]; then
+		echo -ne "n\np\n1\n$BUILDIMAGE_START_SECTOR\n$(($START_SECTOR-1))\nt\n$BUILDIMAGE_BOOTFS_TYPE_ID\nn\np\n2\n$START_SECTOR\n\nw\n" | fdisk ${IMAGE} 1>/dev/null
+	else
+		echo -ne "n\np\n1\n$BUILDIMAGE_START_SECTOR\n\nw\n" | fdisk ${IMAGE} 1>/dev/null
+	fi
+
 	[ $? != 0 ] && error "Error in partition image"
 	log_app_msg "Mapping devices..."
 	sync
+
 	# mapping devices
 	local KPARTX_VERBOSE="$($KPARTX_BIN -vasl "$IMAGE")"
 	local MAPPED_DEVS=($(echo "$KPARTX_VERBOSE" | awk '{ print $1 }'))
 	local LOOPDEV="$(echo "$KPARTX_VERBOSE" | head -n1 | awk '{ print $5 }')"
 
-	local BOOTFS="/dev/${MAPPED_DEVS[0]}"
-	local ROOTFS="/dev/${MAPPED_DEVS[1]}"
-	if [ -b /dev/mapper/${MAPPED_DEVS[0]} ]; then
-        local BOOTFS="/dev/mapper/${MAPPED_DEVS[0]}"
-	fi
-
-	if [ -b /dev/mapper/${MAPPED_DEVS[1]} ]; then
-        local ROOTFS="/dev/mapper/${MAPPED_DEVS[1]}"
+	if [ "$BUILDIMAGE_USE_BOOTFS" == "yes" ]; then
+		local BOOTFS="/dev/${MAPPED_DEVS[0]}"
+		local ROOTFS="/dev/${MAPPED_DEVS[1]}"
+		[ -b /dev/mapper/${MAPPED_DEVS[0]} ] && local BOOTFS="/dev/mapper/${MAPPED_DEVS[0]}"
+		[ -b /dev/mapper/${MAPPED_DEVS[1]} ] && local ROOTFS="/dev/mapper/${MAPPED_DEVS[1]}"
+	else
+		local ROOTFS="/dev/${MAPPED_DEVS[0]}"
+		[ -b /dev/mapper/${MAPPED_DEVS[0]} ] && local ROOTFS="/dev/mapper/${MAPPED_DEVS[0]}"
 	fi
 
 	# partition table changes, force re-read the partition table.
 	partprobe $LOOPDEV
-	# format bootfs
-	log_app_msg "Formating ${BOOTFS}"
-	mkfs -t $BUILDIMAGE_BOOTFS_TYPE $BUILDIMAGE_BOOTFS_MKFS_ARGS "${BOOTFS}" &>/dev/null || {
-		$LOSETUP_BIN -d $LOOPDEV
-		error "Cant format ${BOOTFS_MOUNTPOINT}"
-	}
+
+	if [ "$BUILDIMAGE_USE_BOOTFS" == "yes" ]; then
+		# format bootfs
+		log_app_msg "Formating ${BOOTFS}"
+		mkfs -t $BUILDIMAGE_BOOTFS_TYPE $BUILDIMAGE_BOOTFS_MKFS_ARGS "${BOOTFS}" &>/dev/null || {
+			$LOSETUP_BIN -d $LOOPDEV
+			error "Cant format ${BOOTFS_MOUNTPOINT}"
+		}
+	fi
+
 	# format rootfs
 	log_app_msg "Formating ${ROOTFS}"
 	mkfs -t $BUILDIMAGE_ROOTFS_TYPE $BUILDIMAGE_ROOTFS_MKFS_ARGS "${ROOTFS}" &>/dev/null || {
@@ -330,7 +358,11 @@ function buildImg() {
 
 	# get uuid of bootfs & rootfs for use in scripts
 	local ROOTFS_UUID="$(blkid -s UUID -o value $ROOTFS)"
-	local BOOTFS_UUID="$(blkid -s UUID -o value $BOOTFS)"
+
+	if [ "$BUILDIMAGE_USE_BOOTFS" == "yes" ]; then
+		local BOOTFS_UUID="$(blkid -s UUID -o value $BOOTFS)"
+	fi
+
 	# execute script to write bootloader (if necessary)
 	if [ -f "$CONFIGPATH"/"$BUILDIMAGE_TARGET"/"$BUILDIMAGE_AFTERGEN" ]; then
 		log_app_msg "executing $BUILDIMAGE_AFTERGEN"
@@ -343,12 +375,17 @@ function buildImg() {
 	local BUILDIMAGE_MOUNTPOINT="/tmp/.embedtool$RANDOM"
 	log_app_msg "Creating ${BUILDIMAGE_MOUNTPOINT}.."
 	mkdir -p "$BUILDIMAGE_MOUNTPOINT" || error "Cant create $BUILDIMAGE_MOUNTPOINT"
+
 	# mount loop devices
 	log_app_msg "Mounting ${ROOTFS} at $BUILDIMAGE_MOUNTPOINT"
 	mount "${ROOTFS}" "$BUILDIMAGE_MOUNTPOINT" || error "Cant mount ${ROOTFS} at $BUILDIMAGE_MOUNTPOINT"
 	mkdir -p "$BUILDIMAGE_MOUNTPOINT"/"${BOOTFS_MOUNTPOINT}"
-	log_app_msg "Mounting ${BOOTFS} at $BUILDIMAGE_MOUNTPOINT/${BOOTFS_MOUNTPOINT}"
-	mount "${BOOTFS}" "$BUILDIMAGE_MOUNTPOINT"/"${BOOTFS_MOUNTPOINT}" || error "Cant mount ${BOOTFS} at $BUILDIMAGE_MOUNTPOINT"
+
+	if [ "$BUILDIMAGE_USE_BOOTFS" == "yes" ]; then
+		log_app_msg "Mounting ${BOOTFS} at $BUILDIMAGE_MOUNTPOINT/${BOOTFS_MOUNTPOINT}"
+		mount "${BOOTFS}" "$BUILDIMAGE_MOUNTPOINT"/"${BOOTFS_MOUNTPOINT}" || error "Cant mount ${BOOTFS} at $BUILDIMAGE_MOUNTPOINT"
+	fi
+
 	# copy data
 	log_app_msg "Copying ${TARGET} to $BUILDIMAGE_MOUNTPOINT"
 	#-rltvz
@@ -364,7 +401,7 @@ function buildImg() {
 	fi
 	# umount temp dir
 	log_app_msg "Umounting ${BUILDIMAGE_MOUNTPOINT}.."
-	umount "$BUILDIMAGE_MOUNTPOINT"/"${BOOTFS_MOUNTPOINT}"
+	[ "$BUILDIMAGE_USE_BOOTFS" == "yes" ] && umount "$BUILDIMAGE_MOUNTPOINT"/"${BOOTFS_MOUNTPOINT}"
 	umount "$BUILDIMAGE_MOUNTPOINT"
 	sync
 	# delete loop device
@@ -380,7 +417,12 @@ while [ "$1" != "" ]; do
 	case $1 in
 		-l|--targetlist)
 			log_app_msg "lists the supported targets:"
-			ls "${CONFIGPATH}" 2>/dev/null || error "targets list not found"
+			dirs=(${CONFIGPATH})
+			for d in "${dirs[@]}"; do
+				echo "Folder: $d"
+				ls "${d}" 2>/dev/null
+				echo
+			done
 		;;
 		-v|--verbose)
 			VERBOSE_MSG="yes"
