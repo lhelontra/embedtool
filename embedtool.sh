@@ -62,17 +62,17 @@ function log_app_msg() {
 [ -z $KPARTX_BIN ] && error "Please, install kpartx package: apt-get install kpartx"
 
 function usage() {
-	echo -ne "Usage: $0 [-l|--targetlist] [-v|--verbose] [-d|--appendpath <path>] [-t|--target <target>] [-s|--shared <shared diretory>] [options]\nOptions:\t
+	echo -ne "Usage: $0 [-l|--targetlist] [-v|--verbose] [-d|--appendpath <path>] [-t|--target <target>] [-s|--shared <shared folder>] [options]\nOptions:\t
 	-l, --targetlist                                                             lists the supported targets.
 	-v, --verbose                                                                enable verbose.
 	-ap, --appendpath <path>                                                     Append target(s) path.
-	-t, --target <machine>                                                       load target config file. (default target: Null | default: config directories: $CONFIGPATH)
-	-m, --mount <imgfile|device> <mount_point_dir>                               mount source to mount point diretory.
+	-t, --target <machine>                                                       load target config file. (default target: Null | default: config folders: $CONFIGPATH)
+	-m, --mount <imgfile|device> <mount_point_dir>                               mount source to mount point folder.
 	-u, --umount <mount_point_dir>                                               umount image mounted.
-	-cp,--copy <device|image> <device destination|destination diretory>          copy data sorce to destination.
-	-bimg, --buildimg <system diretory> <imagename>                              build image for target using diretory.
-	-c, --chroot <imgfile|diretory> [\"cmd\"]                                    chroot in image or diretory and mount shared diretory and/or execute command using image enviroment. Use with in shared diretory.
-	-s, --shared <shared diretory>                                               shared diretory for using with --chroot. Mount inside chroot image/diretory.
+	-cp,--copy <device|image> <device destination|destination folder>            copy data sorce to destination.
+	-bimg, --buildimg <system folder> <imagename>                                build image for target using folder.
+	-c, --chroot <imgfile|folder> [\"cmd\"]                                      chroot in image or folder and mount shared folder and/or execute command using image enviroment. Use with in shared folder.
+	-s, --shared <shared folder>                                                 shared folder for using with --chroot. Mount inside chroot image/folder.
 	\n"
 	exit 1
 }
@@ -87,13 +87,13 @@ function targetCheck() {
 function mountSharedDir() {
 	local LOCALDIR="$1"
 	local MOUNT_POINT="$2"
-	log_app_msg "Mounting shared diretory at $CHROOT_SHAREDDIR"
+	log_app_msg "Mounting shared folder at $CHROOT_SHAREDDIR"
 	mkdir -p "$MOUNT_POINT"/"$CHROOT_SHAREDDIR" &>/dev/null
-	mount -o bind "$LOCALDIR" "$MOUNT_POINT"/"$CHROOT_SHAREDDIR" || error "cant mount shared diretory"
+	mount -o bind "$LOCALDIR" "$MOUNT_POINT"/"$CHROOT_SHAREDDIR" || error "cant mount shared folder"
 }
 
 function umountSharedDir() {
-	umount "$1"/"$CHROOT_SHAREDDIR" &>/dev/null && log_app_msg "Umounting shared diretory: $1/$CHROOT_SHAREDDIR"
+	umount "$1"/"$CHROOT_SHAREDDIR" &>/dev/null && log_app_msg "Umounting shared folder: $1/$CHROOT_SHAREDDIR"
 }
 
 function _mount() {
@@ -198,7 +198,7 @@ function enterChroot() {
 	local IMG_FILE="$1"
 	local CMD="$2"
 	local MOUNT_POINT="/tmp/.embedtool$RANDOM"
-	mkdir -p $MOUNT_POINT || error "cant create temp diretory"
+	mkdir -p $MOUNT_POINT || error "cant create temp folder"
 	# mount image partititons
 	_mount "$IMG_FILE" "$MOUNT_POINT"
 	# enable chroot arm
@@ -225,14 +225,14 @@ function copy() {
 		local SYS_MOUNTPOINT=${SOURCE}
 		if [ -b $SOURCE ] || [ -f $SOURCE ]; then
 			SYS_MOUNTPOINT="/tmp/.embedtool$RANDOM"
-			mkdir -p $SYS_MOUNTPOINT || error "cant create system diretory"
+			mkdir -p $SYS_MOUNTPOINT || error "cant create system folder"
 			_mount $SOURCE "$SYS_MOUNTPOINT"
 		fi
 		log_app_msg "copying $SOURCE to $DEST"
 		$RSYNC_BIN --delete -avP --stats --human-readable "$SYS_MOUNTPOINT"/* "${DEST}" 1>/dev/null || log_failure_msg "Cant copy files $SYS_MOUNTPOINT to $DEST"
 	fi
 	sync
-	# if source is block or image, remove temporary diretory
+	# if source is block or image, remove temporary folder
 	if [ -b $SOURCE ] || [ -f $SOURCE ]; then
 		u_mount $SYS_MOUNTPOINT
 		rm -rf $SYS_MOUNTPOINT
@@ -250,7 +250,7 @@ function buildImg() {
 		read answer
 		echo "$answer" | grep -iq "^n" && exit 0
 	}
-	log_app_msg "Target image: $IMAGE | Target diretory: $TARGET"
+	log_app_msg "Target image: $IMAGE | Target folder: $TARGET"
 	# size without boot folder
 	local SYSTEM_PART_SIZE_MB=$(du --total --exclude="${TARGET}/${BOOTFS_MOUNTPOINT}/*" -m ${TARGET} | tail -n 1 | awk '{ print $1 }')
 	# rootfs + extra size
@@ -370,7 +370,7 @@ function buildImg() {
 	# delete loop device
 	log_app_msg "Deleting loop devices.."
 	$LOSETUP_BIN -d $LOOPDEV
-	# remove temp diretory
+	# remove temp folder
 	rm -rf "$BUILDIMAGE_MOUNTPOINT"
 	log_app_msg "$IMAGE generated"
 	exit 0
