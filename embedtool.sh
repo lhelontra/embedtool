@@ -78,7 +78,7 @@ function usage() {
 }
 
 function targetCheck() {
-	[ -z $BUILDIMAGE_TARGET ] && { 
+	[ -z $BUILDIMAGE_TARGET ] && {
 		log_failure_msg "Target machine not defined"
 		usage
 	}
@@ -99,7 +99,7 @@ function umountSharedDir() {
 function _mount() {
 	local SOURCE="$1"
 	local MOUNT_POINT="$2"
-	
+
 	# mount block device
 	if [ -b $SOURCE ]; then
 		log_app_msg "Mounting ${SOURCE}2 at $MOUNT_POINT"
@@ -107,7 +107,7 @@ function _mount() {
 		log_app_msg "Mounting ${SOURCE}1 at ${MOUNT_POINT}/${BOOTFS_MOUNTPOINT}"
 		mkdir -p  "${MOUNT_POINT}"/"$BOOTFS_MOUNTPOINT"
 		mount "${SOURCE}1" "${MOUNT_POINT}"/"$BOOTFS_MOUNTPOINT" || error "cant mount ${SOURCE}1"
-	
+
 	# mount image
 	elif [ -f $SOURCE ]; then
 		$LOSETUP_BIN -d $($LOSETUP_BIN --associated $SOURCE | awk '{ print $1 }' | cut -d: -f1) &>/dev/null
@@ -118,22 +118,22 @@ function _mount() {
 		log_app_msg "Mounting image / at $MOUNT_POINT/"
 		log_app_msg "Sector offset $SECTOR_OFFSET - Byte offset $BYTE_OFFSET"
 		mkdir -p "$MOUNT_POINT"/
-		
+
 		LOOPDEV=$($LOSETUP_BIN --find)
 		$LOSETUP_BIN $LOOPDEV $SOURCE -o $BYTE_OFFSET
 		mount -t auto $LOOPDEV $MOUNT_POINT/ || error "cant mount $MOUNT_POINT/" || error "cant mount $MOUNT_POINT/"
-		
+
 		if [ "$SECTOR_OFFSET_BOOT" != "" ]; then
             BYTE_OFFSET_BOOT=$(($SECTOR_OFFSET_BOOT * $SECTOR_SIZE))
-            log_app_msg "Sector offset $SECTOR_OFFSET_BOOT - Byte offset $BYTE_OFFSET_BOOT" 
+            log_app_msg "Sector offset $SECTOR_OFFSET_BOOT - Byte offset $BYTE_OFFSET_BOOT"
             log_app_msg "Mounting image ${BOOTFS_MOUNTPOINT} at $MOUNT_POINT/${BOOTFS_MOUNTPOINT}"
             mkdir -p "$MOUNT_POINT"/"$BOOTFS_MOUNTPOINT"
-            
+
             LOOPDEV_BOOT=$($LOSETUP_BIN --find)
-			$LOSETUP_BIN $LOOPDEV_BOOT $SOURCE -o $BYTE_OFFSET_BOOT
+						$LOSETUP_BIN $LOOPDEV_BOOT $SOURCE -o $BYTE_OFFSET_BOOT
             mount -t auto $LOOPDEV_BOOT $MOUNT_POINT/${BOOTFS_MOUNTPOINT} || error "cant mount $MOUNT_POINT/${BOOTFS_MOUNTPOINT}"
 		fi
-		
+
 	else
 		error "mount only image or device"
 	fi
@@ -153,24 +153,41 @@ function chrootArm() {
 	# prepare chroot
 	log_app_msg "Disable $MOUNT_POINT/etc/ld.so.preload ..."
 	sed -i -n 's/\(^.*\)/#\1/p' "$MOUNT_POINT"/etc/ld.so.preload &>/dev/null || log_failure_msg "cant read $MOUNT_POINT/etc/ld.so.preload"
-	log_app_msg "copying qemu-arm-static .."
-	# copy qemu-arm-static
-	cp "$QEMU_ARM_STATIC_BIN" "$MOUNT_POINT"/"$QEMU_ARM_STATIC_BIN" &>/dev/null || {
-		log_failure_msg "error on copy qemu-arm-static" 
+
+	# try qemu static
+	local correct_qemu_static=""
+	for b in $(dirname ${QEMU_ARM_STATIC_BIN})/qemu-*; do
+		$b "$MOUNT_POINT"/bin/bash 2>&1 | grep -vq 'Invalid ELF' && {
+			correct_qemu_static="$b"
+			break
+		}
+	done
+
+	[ -z "$correct_qemu_static" ] && {
+		log_failure_msg "not found qemu static"
+		return 1
+	}
+
+	log_app_msg "copying $(basename $correct_qemu_static) ..."
+	# copy qemu static
+	cp "$correct_qemu_static" "$MOUNT_POINT"/"$correct_qemu_static" &>/dev/null || {
+		log_failure_msg "error on copy $(basename $correct_qemu_static)"
 		return 1
 	}
 	sync
+
 	for mount_point in /dev /dev/pts /proc /sys ; do mount "$mount_point" -o bind "$MOUNT_POINT"/"$mount_point"; done
 	# change to working dir and execute command and exit
-	[ ! -z "$CMD" ] && { 
+	[ ! -z "$CMD" ] && {
 		log_app_msg "Launching command: $CMD"
 		CMD="cd $CHROOT_SHAREDDIR ; $CMD ; exit"
 	}
+
 	chroot $MOUNT_POINT bin/bash --init-file <(echo 'cd;export PS1="\[\033[38;5;51m\]\u\[$(tput sgr0)\]\[\033[38;5;15m\]@\[$(tput sgr0)\]\[\033[38;5;9m\]QemuArm-$(uname -m)\[$(tput sgr0)\]\[\033[38;5;15m\] \[$(tput sgr0)\]\[\033[38;5;6m\]\w\[$(tput sgr0)\]\[\033[38;5;15m\] \\$: \[$(tput sgr0)\]"';echo "$CMD")
 	log_app_msg "Reactivate $MOUNT_POINT/etc/ld.so.preload ..."
 	sed -i -n 's/^#*\(.*\)/\1/p' "$MOUNT_POINT"/etc/ld.so.preload &>/dev/null || log_failure_msg "cant read $MOUNT_POINT/etc/ld.so.preload"
-	log_app_msg "Removing qemu-arm-static"
-	rm -f "$MOUNT_POINT"/"$QEMU_ARM_STATIC_BIN"
+	log_app_msg "Removing $(basename $correct_qemu_static)"
+	rm -f "$MOUNT_POINT"/"$correct_qemu_static"
 	sync
 	for mount_point in /dev/pts /dev /proc /sys ; do umount "$MOUNT_POINT"/"$mount_point"; done
 	umountSharedDir "$MOUNT_POINT"
@@ -190,7 +207,7 @@ function enterChroot() {
 	u_mount "$MOUNT_POINT"
 	umountSharedDir "$MOUNT_POINT"
 	rm -rf $MOUNT_POINT
-	
+
 	# detach all devices associated with img
 	losetup -d $(losetup -j $IMG_FILE | awk '{ print $1 }' | cut -d: -f1)
 }
@@ -207,7 +224,7 @@ function copy() {
 	else
 		local SYS_MOUNTPOINT=${SOURCE}
 		if [ -b $SOURCE ] || [ -f $SOURCE ]; then
-			SYS_MOUNTPOINT="/tmp/.embedtool$RANDOM" 
+			SYS_MOUNTPOINT="/tmp/.embedtool$RANDOM"
 			mkdir -p $SYS_MOUNTPOINT || error "cant create system diretory"
 			_mount $SOURCE "$SYS_MOUNTPOINT"
 		fi
@@ -231,7 +248,7 @@ function buildImg() {
 	[ -f $IMAGE ] && {
 		echo -n "File $IMAGE exists. You want to overwrite (y/n)? "
 		read answer
-		echo "$answer" | grep -iq "^n" && exit 0 
+		echo "$answer" | grep -iq "^n" && exit 0
 	}
 	log_app_msg "Target image: $IMAGE | Target diretory: $TARGET"
 	# size without boot folder
@@ -264,64 +281,64 @@ function buildImg() {
 # 	p
 # 	2
 # 	$START_SECTOR
-# 
+#
 # 	w
 # 	EOF
 	log_app_msg "Partitiong image.."
 	echo -ne "n\np\n1\n$BUILDIMAGE_BOOTFS_START_SECTOR\n$(($START_SECTOR-1))\nt\n$BUILDIMAGE_BOOTFS_TYPE_ID\nn\np\n2\n$START_SECTOR\n\nw\n" | fdisk ${IMAGE} 1>/dev/null
-	[ $? != 0 ] && error "Error in partition image" 
+	[ $? != 0 ] && error "Error in partition image"
 	log_app_msg "Mapping devices..."
 	sync
 	# mapping devices
 	local KPARTX_VERBOSE="$($KPARTX_BIN -vasl "$IMAGE")"
 	local MAPPED_DEVS=($(echo "$KPARTX_VERBOSE" | awk '{ print $1 }'))
 	local LOOPDEV="$(echo "$KPARTX_VERBOSE" | head -n1 | awk '{ print $5 }')"
-	
+
 	local BOOTFS="/dev/${MAPPED_DEVS[0]}"
 	local ROOTFS="/dev/${MAPPED_DEVS[1]}"
 	if [ -b /dev/mapper/${MAPPED_DEVS[0]} ]; then
         local BOOTFS="/dev/mapper/${MAPPED_DEVS[0]}"
 	fi
-	
+
 	if [ -b /dev/mapper/${MAPPED_DEVS[1]} ]; then
         local ROOTFS="/dev/mapper/${MAPPED_DEVS[1]}"
 	fi
-	
+
 	# partition table changes, force re-read the partition table.
 	partprobe $LOOPDEV
 	# format bootfs
 	log_app_msg "Formating ${BOOTFS}"
-	mkfs -t $BUILDIMAGE_BOOTFS_TYPE $BUILDIMAGE_BOOTFS_MKFS_ARGS "${BOOTFS}" &>/dev/null || { 
+	mkfs -t $BUILDIMAGE_BOOTFS_TYPE $BUILDIMAGE_BOOTFS_MKFS_ARGS "${BOOTFS}" &>/dev/null || {
 		$LOSETUP_BIN -d $LOOPDEV
 		error "Cant format ${BOOTFS_MOUNTPOINT}"
 	}
 	# format rootfs
 	log_app_msg "Formating ${ROOTFS}"
-	mkfs -t $BUILDIMAGE_ROOTFS_TYPE $BUILDIMAGE_ROOTFS_MKFS_ARGS "${ROOTFS}" &>/dev/null || { 
+	mkfs -t $BUILDIMAGE_ROOTFS_TYPE $BUILDIMAGE_ROOTFS_MKFS_ARGS "${ROOTFS}" &>/dev/null || {
 		$LOSETUP_BIN -d $LOOPDEV
 		error "Cant format / rootfs"
 	}
-	
+
 	# NOTE: if defined, overwrite mke2fs default flags
 	[ ! -z "$BUILDIMAGE_ROOTFS_FLAGS" ] && {
 		log_app_msg "Overwrite mk2fs flags"
-		mke2fs -F -O $BUILDIMAGE_ROOTFS_FLAGS ${ROOTFS} &>/dev/null || { 
+		mke2fs -F -O $BUILDIMAGE_ROOTFS_FLAGS ${ROOTFS} &>/dev/null || {
 			$LOSETUP_BIN -d $LOOPDEV
 			error "Cant overwrite mk2fs flags"
 		}
 	}
-	
+
 	# get uuid of bootfs & rootfs for use in scripts
 	local ROOTFS_UUID="$(blkid -s UUID -o value $ROOTFS)"
 	local BOOTFS_UUID="$(blkid -s UUID -o value $BOOTFS)"
 	# execute script to write bootloader (if necessary)
 	if [ -f "$CONFIGPATH"/"$BUILDIMAGE_TARGET"/"$BUILDIMAGE_AFTERGEN" ]; then
 		log_app_msg "executing $BUILDIMAGE_AFTERGEN"
-		source "$CONFIGPATH"/"$BUILDIMAGE_TARGET"/"$BUILDIMAGE_AFTERGEN" || { 
+		source "$CONFIGPATH"/"$BUILDIMAGE_TARGET"/"$BUILDIMAGE_AFTERGEN" || {
 			$LOSETUP_BIN -d $LOOPDEV
 			error "Cant run $BUILDIMAGE_AFTERGEN"
 		}
-	fi 
+	fi
 	# create temp dir
 	local BUILDIMAGE_MOUNTPOINT="/tmp/.embedtool$RANDOM"
 	log_app_msg "Creating ${BUILDIMAGE_MOUNTPOINT}.."
@@ -340,11 +357,11 @@ function buildImg() {
 	# execute after copying data
 	if [ -f "$CONFIGPATH"/"$BUILDIMAGE_TARGET"/"$BUILDIMAGE_AFTERCOPYDATA" ]; then
 		log_app_msg "executing $BUILDIMAGE_AFTERCOPYDATA"
-		source "$CONFIGPATH"/"$BUILDIMAGE_TARGET"/"$BUILDIMAGE_AFTERCOPYDATA" || { 
+		source "$CONFIGPATH"/"$BUILDIMAGE_TARGET"/"$BUILDIMAGE_AFTERCOPYDATA" || {
 			$LOSETUP_BIN -d $LOOPDEV
 			error "Cant run $BUILDIMAGE_AFTERCOPYDATA"
 		}
-	fi 
+	fi
 	# umount temp dir
 	log_app_msg "Umounting ${BUILDIMAGE_MOUNTPOINT}.."
 	umount "$BUILDIMAGE_MOUNTPOINT"/"${BOOTFS_MOUNTPOINT}"
