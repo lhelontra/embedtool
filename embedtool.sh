@@ -102,11 +102,18 @@ function _mount() {
 
 	# mount block device
 	if [ -b $SOURCE ]; then
-		log_app_msg "Mounting ${SOURCE}2 at $MOUNT_POINT"
-		mount "${SOURCE}2" "$MOUNT_POINT" || error "cant mount ${SOURCE}2"
-		log_app_msg "Mounting ${SOURCE}1 at ${MOUNT_POINT}/${BOOTFS_MOUNTPOINT}"
-		mkdir -p  "${MOUNT_POINT}"/"$BOOTFS_MOUNTPOINT"
-		mount "${SOURCE}1" "${MOUNT_POINT}"/"$BOOTFS_MOUNTPOINT" || error "cant mount ${SOURCE}1"
+		local rootfs=$(ls ${SOURCE}*2)
+		if [ ! -z "$rootfs" ]; then
+			log_app_msg "Mounting ${rootfs} at $MOUNT_POINT"
+			mount "${rootfs}" "$MOUNT_POINT" || error "cant mount ${rootfs}"
+		fi
+
+		local bootfs=$(ls ${SOURCE}*1)
+		if [ ! -z "$bootfs" ]; then
+			log_app_msg "Mounting ${bootfs} at ${MOUNT_POINT}/${BOOTFS_MOUNTPOINT}"
+			mkdir -p  "${MOUNT_POINT}"/"$BOOTFS_MOUNTPOINT"
+			mount "${bootfs}" "${MOUNT_POINT}"/"$BOOTFS_MOUNTPOINT" || error "cant mount ${bootfs}"
+		fi
 
 	# mount image
 	elif [ -f $SOURCE ]; then
@@ -130,7 +137,7 @@ function _mount() {
             mkdir -p "$MOUNT_POINT"/"$BOOTFS_MOUNTPOINT"
 
             LOOPDEV_BOOT=$($LOSETUP_BIN --find)
-						$LOSETUP_BIN $LOOPDEV_BOOT $SOURCE -o $BYTE_OFFSET_BOOT
+			$LOSETUP_BIN $LOOPDEV_BOOT $SOURCE -o $BYTE_OFFSET_BOOT
             mount -t auto $LOOPDEV_BOOT $MOUNT_POINT/${BOOTFS_MOUNTPOINT} || error "cant mount $MOUNT_POINT/${BOOTFS_MOUNTPOINT}"
 		fi
 
@@ -156,7 +163,7 @@ function chrootArm() {
 
 	# try qemu static
 	local correct_qemu_static=""
-	for b in $(dirname ${QEMU_ARM_STATIC_BIN})/qemu-*; do
+	for b in $(dirname ${QEMU_ARM_STATIC_BIN})/qemu-*-static; do
 		$b "$MOUNT_POINT"/bin/bash 2>&1 | grep -vq 'Invalid ELF' && {
 			correct_qemu_static="$b"
 			break

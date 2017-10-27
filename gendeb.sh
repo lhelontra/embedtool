@@ -10,7 +10,7 @@ chmod +x ${TEMPDIR}/usr/local/sbin/embedtool
 cp -R targets/ ${TEMPDIR}/usr/local/share/embedtool/
 
 sizeof=$(du -b ${TEMPDIR}/usr/ | tail -n1 | awk '{ print $1 }')
-version="0.1.1"
+version="0.1.2"
 arch="all"
 
 cat <<-EOF > ${TEMPDIR}/DEBIAN/control
@@ -21,7 +21,7 @@ Installed-Size: $sizeof
 Maintainer: lhe.lontra@gmail.com
 Architecture: $arch
 Version: $version
-Depends: fdisk (>= 2.29.2-5+b1), mount (>= 2.25.2-6), rsync (>=3.1.1-3), kpartx (>= 0.6.4-5), qemu-user-static (>= 1:2.8+dfsg-6+deb9u2)
+Depends: mount (>= 2.25.2-6), util-linux (>=2.25.2-6), rsync (>=3.1.1-3), kpartx (>= 0.6.4-5), qemu-user-static (>= 1:2.1)
 Description: Script to help customization firmwares, uses the image of the environment / directory to crosscompiler. The premise is to use an image or directory with the system to make the crosscompiler / customization operations, and finally generate the desired image.
 EOF
 
