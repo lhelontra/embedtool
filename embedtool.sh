@@ -118,7 +118,7 @@ function _mount() {
     # mount image
     elif [ -f $SOURCE ]; then
         $LOSETUP_BIN -d $($LOSETUP_BIN --associated $SOURCE | awk '{ print $1 }' | cut -d: -f1) &>/dev/null
-        FDISK_RESULT=$(/sbin/fdisk -lu $SOURCE)
+        FDISK_RESULT=$(fdisk -lu $SOURCE)
         SECTOR_OFFSET=$(echo "$FDISK_RESULT" | awk '$7 == "Linux" || $6 == "Linux" { print $2 }')
         BYTE_OFFSET=$(($SECTOR_OFFSET * $SECTOR_SIZE))
         SECTOR_OFFSET_BOOT=$(echo "$FDISK_RESULT" | awk '$6 ~ /FAT|W95/ || $7 ~ /FAT|W95/ { print $2 }')
@@ -357,7 +357,7 @@ function buildImg() {
     # NOTE: if defined, overwrite mke2fs default flags
     [ ! -z "$BUILDIMAGE_ROOTFS_FLAGS" ] && {
         log_app_msg "Overwrite mk2fs flags"
-        mke2fs -F -O $BUILDIMAGE_ROOTFS_FLAGS ${ROOTFS} &>/dev/null || {
+        mke2fs -F -O $BUILDIMAGE_ROOTFS_FLAGS ${ROOTFS} 1>/dev/null || {
             $LOSETUP_BIN -d $LOOPDEV
             error "Cant overwrite mk2fs flags"
         }
