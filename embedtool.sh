@@ -29,10 +29,10 @@
 #OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 #EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-declare -r QEMU_ARM_STATIC_BIN=$(whereis -b qemu-arm-static | awk '{ print $2 }')
-declare -r RSYNC_BIN=$(whereis -b rsync | awk '{ print $2 }')
-declare -r KPARTX_BIN=$(whereis -b kpartx | awk '{ print $2 }')
-declare -r LOSETUP_BIN=$(whereis -b losetup | awk '{ print $2 }')
+declare -r QEMU_ARM_STATIC_BIN=$(command -v qemu-arm-static)
+declare -r RSYNC_BIN=$(command -v rsync)
+declare -r KPARTX_BIN=$(command -v kpartx)
+declare -r LOSETUP_BIN=$(command -v losetup)
 
 CONFIGPATH="./targets/ /usr/local/share/embedtool/targets/"
 RED='\033[0;31m'
