@@ -10,7 +10,7 @@ chmod +x ${TEMPDIR}/usr/local/sbin/embedtool
 cp -R targets/ ${TEMPDIR}/usr/local/share/embedtool/
 
 sizeof=$(du -b ${TEMPDIR}/usr/ | tail -n1 | awk '{ print $1 }')
-version="0.1.2"
+version="0.1.3"
 arch="all"
 
 cat <<-EOF > ${TEMPDIR}/DEBIAN/control
