@@ -226,7 +226,7 @@ function copy() {
     # image to device
     if [ -f $SOURCE ] && [ -b $DEST ]; then
         log_app_msg "recording $SOURCE to $DEST"
-        dd if=$SOURCE of=$DEST status=none || log_failure_msg "cant record to $DEST device"
+        dd conv=fdatasync oflag=direct status=progress bs=1M if=$SOURCE of=$DEST || log_failure_msg "cant record to $DEST device"
     # image to folder or device to folder
     else
         local SYS_MOUNTPOINT=${SOURCE}
