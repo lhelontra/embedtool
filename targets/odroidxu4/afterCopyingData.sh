@@ -6,4 +6,6 @@
 # rootfs mountpoint: "$BUILDIMAGE_MOUNTPOINT"/
 #
 
+sed -i '8d' "$BUILDIMAGE_MOUNTPOINT"/usr/local/bin/expand-rootfs.sh
+
 return 0
