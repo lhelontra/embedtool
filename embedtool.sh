@@ -321,7 +321,7 @@ function buildImg() {
     sync
 
     # mapping devices
-    local KPARTX_VERBOSE="$($KPARTX_BIN -vasl "$IMAGE")"
+    local KPARTX_VERBOSE="$($KPARTX_BIN -val "$IMAGE")"
     local MAPPED_DEVS=($(echo "$KPARTX_VERBOSE" | awk '{ print $1 }'))
     local LOOPDEV="$(echo "$KPARTX_VERBOSE" | head -n1 | awk '{ print $5 }')"
 
