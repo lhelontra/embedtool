@@ -321,9 +321,15 @@ function buildImg() {
     sync
 
     # mapping devices
-    local KPARTX_VERBOSE="$($KPARTX_BIN -val "$IMAGE")"
+    $KPARTX_BIN -a "$IMAGE"
+    local KPARTX_VERBOSE="$($KPARTX_BIN -l "$IMAGE")"
+
+    if [ -z "$KPARTX_VERBOSE" ]; then
+        error "Can't creates loop device for $IMAGE"
+    fi
+
     local MAPPED_DEVS=($(echo "$KPARTX_VERBOSE" | awk '{ print $1 }'))
-    local LOOPDEV="$(echo "$KPARTX_VERBOSE" | head -n1 | awk '{ print $5 }')"
+    local LOOPDEV="$($LOSETUP_BIN -j "$IMAGE" | cut -d':' -f1)"
 
     if [ "$BUILDIMAGE_USE_BOOTFS" == "yes" ]; then
         local BOOTFS="/dev/${MAPPED_DEVS[0]}"
@@ -342,7 +348,8 @@ function buildImg() {
         # format bootfs
         log_app_msg "Formating ${BOOTFS}"
         mkfs -t $BUILDIMAGE_BOOTFS_TYPE $BUILDIMAGE_BOOTFS_MKFS_ARGS "${BOOTFS}" &>/dev/null || {
-            $LOSETUP_BIN -d $LOOPDEV
+            $KPARTX_BIN -d $IMAGE &>/dev/null
+            $LOSETUP_BIN -d $LOOPDEV &>/dev/null
             error "Cant format ${BOOTFS_MOUNTPOINT}"
         }
     fi
@@ -350,7 +357,8 @@ function buildImg() {
     # format rootfs
     log_app_msg "Formating ${ROOTFS}"
     mkfs -t $BUILDIMAGE_ROOTFS_TYPE $BUILDIMAGE_ROOTFS_MKFS_ARGS "${ROOTFS}" &>/dev/null || {
-        $LOSETUP_BIN -d $LOOPDEV
+        $KPARTX_BIN -d $IMAGE &>/dev/null
+        $LOSETUP_BIN -d $LOOPDEV &>/dev/null
         error "Cant format / rootfs"
     }
 
@@ -358,7 +366,8 @@ function buildImg() {
     [ ! -z "$BUILDIMAGE_ROOTFS_FLAGS" ] && {
         log_app_msg "Overwrite mk2fs flags"
         mke2fs -F -O $BUILDIMAGE_ROOTFS_FLAGS ${ROOTFS} 1>/dev/null || {
-            $LOSETUP_BIN -d $LOOPDEV
+            $KPARTX_BIN -d $IMAGE &>/dev/null
+            $LOSETUP_BIN -d $LOOPDEV &>/dev/null
             error "Cant overwrite mk2fs flags"
         }
     }
@@ -374,7 +383,7 @@ function buildImg() {
     if [ -f "$CONFIGPATH"/"$BUILDIMAGE_TARGET"/"$BUILDIMAGE_AFTERGEN" ]; then
         log_app_msg "executing $BUILDIMAGE_AFTERGEN"
         source "$CONFIGPATH"/"$BUILDIMAGE_TARGET"/"$BUILDIMAGE_AFTERGEN" || {
-            $LOSETUP_BIN -d $LOOPDEV
+            $LOSETUP_BIN -d $LOOPDEV &>/dev/null
             error "Cant run $BUILDIMAGE_AFTERGEN"
         }
     fi
@@ -402,7 +411,8 @@ function buildImg() {
     if [ -f "$CONFIGPATH"/"$BUILDIMAGE_TARGET"/"$BUILDIMAGE_AFTERCOPYDATA" ]; then
         log_app_msg "executing $BUILDIMAGE_AFTERCOPYDATA"
         source "$CONFIGPATH"/"$BUILDIMAGE_TARGET"/"$BUILDIMAGE_AFTERCOPYDATA" || {
-            $LOSETUP_BIN -d $LOOPDEV
+            $KPARTX_BIN -d $IMAGE &>/dev/null
+            $LOSETUP_BIN -d $LOOPDEV &>/dev/null
             error "Cant run $BUILDIMAGE_AFTERCOPYDATA"
         }
     fi
@@ -413,7 +423,8 @@ function buildImg() {
     sync
     # delete loop device
     log_app_msg "Deleting loop devices.."
-    $LOSETUP_BIN -d $LOOPDEV
+    $KPARTX_BIN -d $IMAGE &>/dev/null
+    $LOSETUP_BIN -d $LOOPDEV &>/dev/null
     # remove temp folder
     rm -rf "$BUILDIMAGE_MOUNTPOINT"
     log_app_msg "$IMAGE generated"
