@@ -119,9 +119,9 @@ function _mount() {
     elif [ -f $SOURCE ]; then
         $LOSETUP_BIN -d $($LOSETUP_BIN --associated $SOURCE | awk '{ print $1 }' | cut -d: -f1) &>/dev/null
         FDISK_RESULT=$(fdisk -lu $SOURCE)
-        SECTOR_OFFSET=$(echo "$FDISK_RESULT" | awk '$7 == "Linux" || $6 == "Linux" { print $2 }')
+        SECTOR_OFFSET=$(echo "$FDISK_RESULT" | awk '$7 == "Linux" || $6 == "Linux" { print $2 }' | head -n1)
         BYTE_OFFSET=$(($SECTOR_OFFSET * $SECTOR_SIZE))
-        SECTOR_OFFSET_BOOT=$(echo "$FDISK_RESULT" | awk '$6 ~ /FAT|W95/ || $7 ~ /FAT|W95/ { print $2 }')
+        SECTOR_OFFSET_BOOT=$(echo "$FDISK_RESULT" | awk '$6 ~ /FAT|W95/ || $7 ~ /FAT|W95/ { print $2 }' | head -n1)
         log_app_msg "Mounting image / at $MOUNT_POINT/"
         log_app_msg "Sector offset $SECTOR_OFFSET - Byte offset $BYTE_OFFSET"
         mkdir -p "$MOUNT_POINT"/
@@ -147,8 +147,10 @@ function _mount() {
 }
 
 function u_mount() {
+    mounted_image_dir="$(findmnt -n -o SOURCE --target "$1")"
     umount $1/${BOOTFS_MOUNTPOINT} &>/dev/null && log_app_msg "Umounting: $1/${BOOTFS_MOUNTPOINT}"
     umount $1/ &>/dev/null && log_app_msg "Umounting: $1"
+    $LOSETUP_BIN -d "$mounted_image_dir" &>/dev/null
 }
 
 function chrootArm() {
