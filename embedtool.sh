@@ -238,7 +238,7 @@ function copy() {
             _mount $SOURCE "$SYS_MOUNTPOINT"
         fi
         log_app_msg "copying $SOURCE to $DEST"
-        $RSYNC_BIN --delete -avP --stats --human-readable "$SYS_MOUNTPOINT"/* "${DEST}" 1>/dev/null || log_failure_msg "Cant copy files $SYS_MOUNTPOINT to $DEST"
+        $RSYNC_BIN --delete -avP --checksum --stats --human-readable "$SYS_MOUNTPOINT"/* "${DEST}" 1>/dev/null || log_failure_msg "Cant copy files $SYS_MOUNTPOINT to $DEST"
     fi
     sync
     # if source is block or image, remove temporary folder
