@@ -385,6 +385,7 @@ function buildImg() {
     if [ -f "$CONFIGPATH"/"$BUILDIMAGE_TARGET"/"$BUILDIMAGE_AFTERGEN" ]; then
         log_app_msg "executing $BUILDIMAGE_AFTERGEN"
         source "$CONFIGPATH"/"$BUILDIMAGE_TARGET"/"$BUILDIMAGE_AFTERGEN" || {
+            $KPARTX_BIN -d $IMAGE &>/dev/null
             $LOSETUP_BIN -d $LOOPDEV &>/dev/null
             error "Cant run $BUILDIMAGE_AFTERGEN"
         }
